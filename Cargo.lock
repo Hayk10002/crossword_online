@@ -340,6 +340,7 @@ name = "frontend"
 version = "0.0.1"
 dependencies = [
  "crossword_generator",
+ "gloo-console 0.3.0",
  "stylist",
  "yew",
 ]

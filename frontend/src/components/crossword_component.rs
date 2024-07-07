@@ -3,19 +3,24 @@ use std::iter::repeat;
 
 use crossword_generator::crossword::Crossword;
 use crossword_generator::placed_word::PlacedWord;
+use gloo_console::log;
 use yew::prelude::*;
 use stylist::css;
+
+use super::super::utils::weak_component_link::WeakComponentLink;
 
 #[derive(PartialEq, Properties)]
 pub struct CrosswordComponentProps
 {
-    pub crossword: Crossword<u8, String>
+    pub crossword: Crossword<u8, String>,
+    pub link: WeakComponentLink<CrosswordComponent>
 }
 
 pub enum CrosswordComponentMessage
 {
     Set(Crossword<u8, String>),
-    AddWord(PlacedWord<u8, String>)
+    AddWord(PlacedWord<u8, String>),
+    RemoveWord(String)
 }
 
 pub struct CrosswordComponent
@@ -30,7 +35,8 @@ impl Component for CrosswordComponent
 
     fn create(ctx: &Context<Self>) -> Self
     {
-        //ctx.link().send_message(CrosswordComponentMessage::Set(ctx.props().crossword));
+        log!("Crossword Create");
+        ctx.props().link.borrow_mut().replace(ctx.link().clone());
         CrosswordComponent
         {
             crossword: ctx.props().crossword.clone()
@@ -39,22 +45,30 @@ impl Component for CrosswordComponent
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool 
     {
+        log!("Crossword Update");
         match msg
         {
             CrosswordComponentMessage::Set(cw) => self.crossword = cw,
-            CrosswordComponentMessage::AddWord(w) => { self.crossword.add_word(w); () }
+            CrosswordComponentMessage::AddWord(w) => { self.crossword.add_word(w); },
+            CrosswordComponentMessage::RemoveWord(s) => { self.crossword.remove_word(&s); }
         }
         true
     }
 
     fn changed(&mut self, ctx: &Context<Self>, _old_props: &Self::Properties) -> bool 
     {
-        ctx.link().send_message(CrosswordComponentMessage::Set(ctx.props().crossword.clone()));
+        log!("Crossword Changed");
+        if ctx.props().crossword != _old_props.crossword
+        {
+            ctx.link().send_message(CrosswordComponentMessage::Set(ctx.props().crossword.clone()));
+            return false;
+        }
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html
     {
+        log!("Crossword View");
         let cw = &ctx.props().crossword;
         let size_x = cw.get_size().0;
         let grid_item_html_iter = cw.generate_char_table()
@@ -85,23 +99,22 @@ impl Component for CrosswordComponent
                 </div>
             });                          
 
-        
-            html!
-            {
-                <div class={
-                    css!(
-                        display: grid;
-                        grid-template-columns: repeat(${size_x}, 1fr);
-                        gap: 5px;
-                        background-color: rgb(156, 156, 156);
-                        padding: 10px;
-                        border-radius: 10px;
-                        font-size: 25px;
-                        max-width: 100%;
-                        box-sizing: border-box;
-                    )}>
-                    {for grid_item_html_iter}
-                </div>
-            }
+        html!
+        {
+            <div class={
+                css!(
+                    display: grid;
+                    grid-template-columns: repeat(${size_x}, 1fr);
+                    gap: 5px;
+                    background-color: rgb(156, 156, 156);
+                    padding: 10px;
+                    border-radius: 10px;
+                    font-size: 25px;
+                    max-width: 100%;
+                    box-sizing: border-box;
+                )}>
+                {for grid_item_html_iter}
+            </div>
+        }
     }
 }

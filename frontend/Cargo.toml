@@ -5,5 +5,6 @@ edition = "2021"
 
 [dependencies]
 yew = { version = "0.21.0", features = ["csr"] }
-stylist = { version = "0.13.0", features = ["yew", "macros"] } 
+stylist = { version = "0.13.0", features = ["yew", "macros"] }
+gloo-console = "0.3.0" 
 crossword_generator = { git = "https://github.com/Hayk10002/crossword_generator.git" }
