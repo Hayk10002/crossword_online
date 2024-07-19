@@ -85,26 +85,27 @@ impl Component for CrosswordComponent
             .map(|((x, y), ch)| 
             html!
             {
-                <div class={
+                <div class={classes!("crosswor-grid-item",
+                    css!( grid-area: ${y + 1} / ${x + 1} / span 1 / span 1; ), //grid-item
                     css!(
-                        grid-area: ${y + 1} / ${x + 1} / span 1 / span 1;
                         aspect-ratio: 1/1;
                         text-align: center;
                         align-content: center;
                         background-color: rgb(84, 84, 84);
                         color: white;
                         border-radius: 5px;
-                    )}>
+                    ))}
+                >
                     {ch as char}
                 </div>
             });                          
 
         html!
         {
-            <div class={
+            <div class={classes!("crossword-grid",
+                css!( grid-template-columns: repeat(${size_x}, 1fr); ), //grid
                 css!(
                     display: grid;
-                    grid-template-columns: repeat(${size_x}, 1fr);
                     gap: 5px;
                     background-color: rgb(156, 156, 156);
                     padding: 10px;
@@ -112,7 +113,8 @@ impl Component for CrosswordComponent
                     font-size: 25px;
                     max-width: 100%;
                     box-sizing: border-box;
-                )}>
+                ))}
+            >
                 {for grid_item_html_iter}
             </div>
         }

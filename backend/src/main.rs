@@ -31,10 +31,21 @@ async fn get_index() -> Result<NamedFile, NotFound<String>>
 }
 
 #[get("/<path..>")]
-async fn index(path: PathBuf, ip_addr: IpAddr, data: &State<UserData>) -> Result<NamedFile, NotFound<String>>
+async fn index(path: PathBuf, ip_addr: IpAddr, user_data: &State<UserData>) -> Result<NamedFile, NotFound<String>>
 {
-    data.login(&ip_addr).await;
+    user_data.login(&ip_addr).await;
     let path = PathBuf::from("../frontend/dist").join(path);
+    match NamedFile::open(path.as_path()).await
+    {
+        Ok(file) => Ok(file),
+        Err(_) => get_index().await,
+    }
+}
+
+#[get("/data/<path..>")]
+async fn data(path: PathBuf) -> Result<NamedFile, NotFound<String>>
+{
+    let path = PathBuf::from("data/").join(path);
     match NamedFile::open(path.as_path()).await
     {
         Ok(file) => Ok(file),
@@ -45,9 +56,9 @@ async fn index(path: PathBuf, ip_addr: IpAddr, data: &State<UserData>) -> Result
 #[launch]
 fn rocket() -> _
 {
-    let data = UserData::default();
+    let user_data = UserData::default();
 
     rocket::build()
-        .mount("/", routes![index])
-        .manage(data)
+        .mount("/", routes![index, data])
+        .manage(user_data)
 }
