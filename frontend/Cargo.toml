@@ -6,8 +6,10 @@ edition = "2021"
 [dependencies]
 yew = { version = "0.21.0", features = ["csr"] }
 yew-router = "0.18.0"
-wasm-bindgen = "0.2.92"
-web-sys = "0.3.69"
+wasm-bindgen = "0.2.93"
+web-sys = { version = "0.3.69", features = ["CssStyleDeclaration", "DomRect", "HtmlCollection"] }
 stylist = { version = "0.13.0", features = ["yew", "macros"] }
 gloo-console = "0.3.0" 
+gloo-utils = "0.2.0"
+itertools = "0.13.0"
 crossword_generator = { git = "https://github.com/Hayk10002/crossword_generator.git" }
