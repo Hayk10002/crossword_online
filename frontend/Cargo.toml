@@ -12,4 +12,5 @@ stylist = { version = "0.13.0", features = ["yew", "macros"] }
 gloo-console = "0.3.0" 
 gloo-utils = "0.2.0"
 itertools = "0.13.0"
+serde = "1.0.208"
 crossword_generator = { git = "https://github.com/Hayk10002/crossword_generator.git" }

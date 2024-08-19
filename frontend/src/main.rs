@@ -5,8 +5,8 @@ use std::default;
 
 use components::{playground_component::PlaygroundComponent, word_component::WordComponent};
 use crossword_generator::{crossword::{Crossword, WordCompatibilitySettings}, placed_word::PlacedWord, word::{Direction, Position, Word}};
-use stylist::{css, global_style, yew::Global};
-use utils::weak_component_link::WeakComponentLink;
+use stylist::{css, global_style, yew::Global, Style};
+use utils::{settings::StyleSettings, weak_component_link::WeakComponentLink};
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
@@ -93,6 +93,8 @@ fn App() -> Html {
         </form>
     });
 
+    let style_settings = use_state(|| StyleSettings::new()); 
+
     html! {
     <>
         <Global css={css!(
@@ -111,27 +113,29 @@ fn App() -> Html {
                 background-color: rgb(84, 84, 84);
             }
         )}/>
-        <div class={classes!("web-layout", 
-            css!
-            (
-                display: grid;
-                grid-template-areas: ${"\'sidebar playground\'"};
-                grid-template-columns: 400px auto;
-                box-sizing: border-box;
-                height: 600px;   
-            )
-        )}>
-            <div class={classes!("sidebar", css!( grid-area: sidebar; ))}>
-                <p>{"Hello from this side"}</p>
-                <WordComponent word={w} link={(*w_link).clone()}/>
-                <WordComponent word={w2} link={(*w_link2).clone()}/>
+        <ContextProvider<StyleSettings> context={(*style_settings).clone()}>
+            <div class={classes!("web-layout", 
+                css!
+                (
+                    display: grid;
+                    grid-template-areas: ${"\'sidebar playground\'"};
+                    grid-template-columns: 400px auto;
+                    box-sizing: border-box;
+                    height: 600px;   
+                )
+            )}>
+                <div class={classes!("sidebar", css!( grid-area: sidebar; ))}>
+                    <p>{"Hello from this side"}</p>
+                    <WordComponent word={w} link={(*w_link).clone()}/>
+                    <WordComponent word={w2} link={(*w_link2).clone()}/>
 
-                { for placed_words_html }
+                    { for placed_words_html }
+                </div>
+                <div class={classes!("playground-area", css!( grid-area: playground; ))}>
+                    <PlaygroundComponent<char, Vec<char>> words={(*cw).clone()} word_compatibility_settings={settings} link={(*cw_link).clone()}/>
+                </div>
             </div>
-            <div class={classes!("playground-area", css!( grid-area: playground; ))}>
-                <PlaygroundComponent<char, Vec<char>> words={(*cw).clone()} word_compatibility_settings={settings} link={(*cw_link).clone()}/>
-            </div>
-        </div>
+        </ContextProvider<StyleSettings>>
     </>
     }
 }

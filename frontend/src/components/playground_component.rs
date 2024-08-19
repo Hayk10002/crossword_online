@@ -23,9 +23,11 @@ use web_sys::CssStyleDeclaration;
 use yew::virtual_dom::VNode;
 use web_sys::WheelEvent;
 
+use crate::components::playground_children_components::{PlaygroundBetweenCellComponent, PlaygroundCellComponent, PlaygroundWordComponent};
 use crate::utils::color_rgba::ColorRGBA;
 
 use super::super::utils::weak_component_link::WeakComponentLink;
+use super::playground_children_components::PlaygroundWordErrorOutlineComponent;
 
 #[derive(PartialEq, Properties)]
 pub struct PlaygroundComponentProps<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'static>
@@ -57,7 +59,7 @@ pub struct PlaygroundComponent<CharT: CrosswordChar, StrT: CrosswordString<CharT
     html: Vec<VNode>,
 }
 
-impl<CharT: CrosswordChar + ToHtml, StrT: CrosswordString<CharT>> PlaygroundComponent<CharT, StrT>
+impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'static> PlaygroundComponent<CharT, StrT>
 {
 
     fn recalculate_drawing_data(&mut self)
@@ -223,111 +225,25 @@ impl<CharT: CrosswordChar + ToHtml, StrT: CrosswordString<CharT>> PlaygroundComp
             })
             .collect::<Vec<(&WordCompatibilityError, (&PlacedWord<CharT, StrT>, (i16, i16)), &PlacedWord<CharT, StrT>)>>();
 
-        log!(JsValue::from_serde(&between_word_data.iter().map(|(_, (w, a), _)| (w.position.clone(), a)).collect::<Vec<_>>()).unwrap());
-
-        let gap: usize = 20;
-        let border_radius: usize = 20;
-        let cell_size: usize = 200;
-        let font_size: usize = 80;
-        let word_border_dist_from_cell_wall: usize = 20;
-        let word_border_width: usize = 8;
-        let word_border_radius: usize = 40;
-        let between_word_width: usize = 8;
-        let between_word_radius: usize = 20;
-        let color_dark = ColorRGBA::opaque(84, 84, 84);
-        let color_normal = ColorRGBA::opaque(125, 125, 125);
-        let color_light = ColorRGBA::opaque(156, 156, 156);
-        let color_error_dark = ColorRGBA::opaque(255, 84, 84);
-        let color_error_normal = ColorRGBA::opaque(255, 125, 125);
-        let color_error_light = ColorRGBA::opaque(255, 156, 156);
-
         let cell_html = cell_data.iter().map(|(pos, (words_and_indexes, compatibility_errors))|
         {
             let characters = words_and_indexes.iter().map(|(w, i)| w.value.as_ref()[*i].clone()).collect::<HashSet<_>>();
             let character = (characters.len() == 1).then_some(characters.into_iter().next().unwrap());
-
-            let words_visible_when_hovered = words_and_indexes.iter().map(|(w, _)| 
-                css!(
-                    :hover ~ #${format!("word{}", word_data.get(w).unwrap().0)} 
-                    { 
-                        visibility: visible;
-                    }
-            )).collect::<Vec<_>>();
-
-            let (background_color, hover_background_color) = 
-                if let Some(_) = &character 
-                    { (color_light, color_normal) } 
-                else 
-                    { (color_error_light, color_error_normal) };
+            let words_ids = words_and_indexes.iter().map(|(w, _)| word_data.get(w).unwrap().0).collect::<Vec<_>>();
 
             html!
             {
-                <div class={classes!("playground_cell",
-                    css!
-                    (
-                        position: absolute;
-                        background-color: ${background_color};
-                        width: ${cell_size}px;
-                        height: ${cell_size}px;
-                        border-radius: ${border_radius}px;
-                        font-size: ${font_size}px;
-                        text-align: center;
-                        align-content: center;
-                        color: white; 
-                        cursor: default;
-                        user-select: none;
-
-                        :hover
-                        {  
-                            background-color: ${hover_background_color};
-                        }
-                    ),
-                    words_visible_when_hovered,
-                    css!(
-                        left: ${pos.x as isize * cell_size as isize + pos.x as isize * gap as isize}px;
-                        top: ${pos.y as isize * cell_size as isize + pos.y as isize * gap as isize}px;
-                    )
-                )}>
-                    { character }
-                </div>
+                <PlaygroundCellComponent<CharT> character={character} words_ids={words_ids} position={pos.clone()}/>
             }
-
         });
 
         let between_cell_html = between_cell_data.iter().map(|((pos, dir), (words, compatibility_errors))|
         {
-            let (width, height) = match dir
-            {
-                Direction::Right => (gap, cell_size),
-                Direction::Down => (cell_size, gap),
-            };
-
-            let styles = words.iter().map(|w| 
-                css!(
-                    :hover ~ #${format!("word{}", word_data.get(w).unwrap().0)} 
-                    { 
-                        visibility: visible;
-                    }
-            )).collect::<Vec<_>>();
+            let words_ids = words.iter().map(|w| word_data.get(w).unwrap().0).collect::<Vec<_>>();
 
             html!
             {
-                <div class={classes!("between_cell",
-                    css!
-                    (
-                        position: absolute;
-                        background-color: transparent;
-                        width: ${width}px;
-                        height: ${height}px;
-                        cursor: default;
-                        user-select: none;
-                    ),
-                    styles,
-                    css!(
-                        left: ${(pos.x as isize + (*dir == Direction::Right) as isize) * cell_size as isize + pos.x as isize * gap as isize}px;
-                        top: ${(pos.y as isize + (*dir == Direction::Down) as isize) * cell_size as isize + pos.y as isize * gap as isize}px;
-                    )
-                )}/>
+                <PlaygroundBetweenCellComponent position={pos.clone()} direction={dir.clone()} words_ids={words_ids}/>
             }
         });
 
@@ -340,155 +256,15 @@ impl<CharT: CrosswordChar + ToHtml, StrT: CrosswordString<CharT>> PlaygroundComp
                 Direction::Down => (1, w.value.as_ref().len()),
             };
 
-            let word_red_when_errors = (!errors.is_empty()).then_some(
-                css!(
-                    visibility: visible;
-                    border-color: ${color_error_dark};
-            ));
-
             html!
             {
-                <div id={format!("word{}", i)} 
-                    class={classes!("word_outline", 
-                    css!
-                    (
-                        position: absolute;
-                        background-color: transparent;
-                        border: ${word_border_width}px solid${" "}${color_dark};
-                        border-radius: ${word_border_radius}px;
-                        box-sizing: border-box;
-                        pointer-events: none;
-                        visibility: hidden;
-                        user-select: none;
-                    ),
-                    word_red_when_errors,
-                    css!
-                    (
-                        left: ${w.position.x as isize * (cell_size + gap) as isize + word_border_dist_from_cell_wall as isize}px;
-                        top: ${w.position.y as isize * (cell_size + gap) as isize + word_border_dist_from_cell_wall as isize}px;
-                        width: ${width * (cell_size + gap) - gap - 2 * word_border_dist_from_cell_wall}px;
-                        height: ${height * (cell_size + gap) - gap - 2 * word_border_dist_from_cell_wall}px;
-                    )
-                )}/>
+                <PlaygroundWordComponent position={w.position.clone()} width={width} height={height} id={i} error_exists={!errors.is_empty()}/>
             }
         });
 
-        let between_word_html = between_word_data.iter().flat_map(|(compatibility_error, (w, (start, end)), w2)|
+        let between_word_html = between_word_data.iter().map(|(compatibility_error, (w, (start, end)), w2)|
         {
-            let start =  *start as usize;
-            let end = *end as usize;
-            let w_len = w.value.as_ref().len() as usize;
-            let (w_width, w_height) = match &w.direction
-            {
-                Direction::Right => (w_len, 1),
-                Direction::Down => (1, w_len),
-            };
-            
-            match &w.direction
-            {
-                Direction::Right => [(0usize, w_len - 1), (w_len, w_len), (w_len + 1, 2 * w_len), (2 * w_len + 1, 2 * w_len + 1)],
-                Direction::Down => [(0, 0), (1, w_len), (w_len + 1, w_len + 1), (w_len + 2, 2 * w_len + 1)],
-            }.into_iter().zip([0, 1, 2, 3]).flat_map(move |((side_start, side_end), side_direction)| // direction 0 top, 1 right, 2 bottom, 3 left
-            {
-                let check_round_order = |a, b, c| (a && b) || (b && c) || (c && a);
-                
-                (side_start..=side_end).into_iter().filter_map(move |curr|
-                {
-                    if !check_round_order(start <= curr, curr <= end, end < start) { return None; }
-                    let start_type = if curr == start {2} else if curr == side_start {1} else {0};
-                    let end_type = if curr == end {2} else if curr == side_end {1} else {0};
-
-                    let div_start = match start_type
-                    {
-                        0 => 0,
-                        1 => between_word_radius, 
-                        2 => (cell_size + gap) / 2,
-                        _ => unreachable!()
-                    };
-
-                    let div_end = match end_type
-                    {
-                        0 => cell_size + gap,
-                        1 => cell_size + gap - between_word_radius, 
-                        2 => (cell_size + gap) / 2,
-                        _ => unreachable!()
-                    };
-
-                    let div_start_color = if start_type == 2 { ColorRGBA{ a: 0, ..color_error_normal } } else { color_error_normal };
-                    let div_end_color = if end_type == 2 { ColorRGBA{ a: 0, ..color_error_normal } } else { color_error_normal };
-
-                    let (div_pos_x, div_pos_y) = match side_direction 
-                    {
-                        0 => ((w.position.x as isize + (curr - side_start) as isize) * (cell_size + gap) as isize - gap as isize / 2 + div_start as isize, w.position.y as isize * (cell_size + gap) as isize - gap as isize / 2 + between_word_width as isize / 2),
-                        1 => ((w.position.x as isize + side_start as isize) * (cell_size + gap) as isize - gap as isize / 2 - between_word_width as isize / 2, (w.position.y as isize + (curr - side_start) as isize) * (cell_size + gap) as isize - gap as isize / 2 + div_start as isize),
-                        2 => ((w.position.x as isize + w_width as isize - (curr - side_start) as isize) * (cell_size + gap) as isize - gap as isize / 2 - div_start as isize, (w.position.y as isize + w_height as isize) * (cell_size + gap) as isize - gap as isize / 2 - between_word_width as isize / 2),
-                        3 => (w.position.x as isize * (cell_size + gap) as isize - gap as isize / 2 + between_word_width as isize / 2, (w.position.y as isize + w_height as isize - (curr - side_start) as isize) * (cell_size + gap) as isize - gap as isize / 2 - div_start as isize),
-                        _ => unreachable!()
-                    };
-
-                    Some(html!
-                    {
-                        <div class={classes!("between_word_error_outline",
-                            css!
-                            (
-                                position: absolute;
-                                user-select: none;
-                                width: ${between_word_width}px;
-                                transform-origin: 0 0;
-                            ),
-                            css!
-                            (
-                                background-image: linear-gradient(to bottom, ${div_start_color}, ${div_end_color});
-                                left: ${div_pos_x}px;
-                                top: ${div_pos_y}px;
-                                height: ${div_end - div_start}px;
-                                transform: rotate(${-90 + side_direction * 90}deg);
-                            )
-                        )}/>
-                    })
-                }).chain(check_round_order(start <= side_end, side_end < end, end < start).then_some(
-                {
-                    let svg_size = between_word_radius + between_word_width / 2;
-                    let (x, y) = match side_direction
-                    {
-                        0 => (w_width, 0),
-                        1 => (w_width, w_height),
-                        2 => (0, w_height),
-                        3 => (0, 0),
-                        _ => unreachable!()
-                    };
-
-                    let (x, y) = (x as isize + w.position.x as isize, y as isize + w.position.y as isize);
-                    let (x, y) = (x * (cell_size + gap) as isize - gap as isize / 2, y * (cell_size + gap) as isize - gap as isize / 2);
-                    html!
-                    {
-                        <svg class={classes!("between_word_error_outline",
-                            css!
-                            (
-                                position: absolute;
-                                user-select: none;
-                                pointer-events: stroke;
-                                transform-origin: 0 0;
-                            ),
-                            css!
-                            (
-                                left: ${x}px;
-                                top: ${y}px;
-                                transform: rotate(${side_direction * 90}deg) translate(${-(between_word_radius as isize)}px, ${-(between_word_width as isize) / 2}px);
-                            )
-                        )}
-                            width={svg_size.to_string()}
-                            height={svg_size.to_string()}
-                        >
-                            <path 
-                                d={format!("M 0 {0} A {1} {1} 0 0 1 {2} {3}", between_word_width / 2, between_word_radius, svg_size - between_word_width / 2, svg_size)} 
-                                stroke={color_error_normal.to_string()} 
-                                stroke-width={between_word_width.to_string()}
-                                fill="none"/>
-                        </svg>
-                    }
-                }))
-            })
+            html! { <PlaygroundWordErrorOutlineComponent position={w.position.clone()} direction={w.direction.clone()} length={w.value.as_ref().len()} start={*start as usize} end={*end as usize}/> }
         });
 
         self.html = cell_html.chain(between_cell_html).chain(word_html).chain(between_word_html).collect();

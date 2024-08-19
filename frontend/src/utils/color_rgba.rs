@@ -1,6 +1,7 @@
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 pub struct ColorRGBA
 {
     pub r: u8,
