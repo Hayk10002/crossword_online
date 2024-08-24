@@ -4,16 +4,24 @@ use yew::prelude::*;
 
 use crate::utils::{color_rgba::ColorRGBA, settings::{PlaygroundStyleSettings, StyleSettings, Theme}};
 
+use super::playground_component::PlaygroundWordState;
+
 #[derive(Properties, PartialEq)]
 pub struct PlaygroundCellComponentProperties<CharT: CrosswordChar>
 {
     pub position: Position,
     pub words_ids: Vec<usize>,
-    pub character: Option<CharT>
+    pub character: Option<CharT>,
+    #[prop_or(PlaygroundWordState::Normal)]
+    pub state: PlaygroundWordState,
+    #[prop_or(Callback::noop())]
+    pub on_invert_word_direction: Callback<()>,
+    #[prop_or(Callback::noop())]
+    pub on_select: Callback<()>,
 }
 
 #[styled_component]
-pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComponentProperties{position: pos, words_ids, character}: &PlaygroundCellComponentProperties<CharT>) -> Html
+pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComponentProperties{position: pos, words_ids, character, state, on_invert_word_direction, on_select}: &PlaygroundCellComponentProperties<CharT>) -> Html
 {
     let StyleSettings { word_style_settings: _, playground_style_settings } = use_context::<StyleSettings>().expect("No style provided");
     let PlaygroundStyleSettings 
@@ -46,13 +54,20 @@ pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComp
             { 
                 visibility: visible;
             }
-    )).collect::<Vec<_>>();
+        )
+    ).collect::<Vec<_>>();
 
     let (background_color, hover_background_color) = 
         if let Some(_) = &character 
             { (color_light, color_normal) } 
         else 
             { (color_error_light, color_error_normal) };
+
+    let hover_effect_when_selected = (state == &PlaygroundWordState::Selected).then_some(css!
+        (
+            background-color: ${hover_background_color};
+        )
+    );
 
     html!
     {
@@ -77,11 +92,14 @@ pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComp
                 }
             ),
             words_visible_when_hovered,
+            hover_effect_when_selected,
             css!(
                 left: ${pos.x as isize * cell_size as isize + pos.x as isize * gap as isize}px;
                 top: ${pos.y as isize * cell_size as isize + pos.y as isize * gap as isize}px;
+                opacity: ${if state == &PlaygroundWordState::Phantom {0.5} else {1f32}};
             )
-        )}>
+        )}
+        ondblclick={on_select.reform(|_| ())}>
             { character }
         </div>
     }
@@ -94,11 +112,13 @@ pub struct PlaygroundBetweenCellComponentProperties
 {
     pub position: Position,
     pub direction: Direction,
-    pub words_ids: Vec<usize>
+    pub words_ids: Vec<usize>,
+    #[prop_or(Callback::noop())]
+    pub on_select: Callback<()>,
 }
 
 #[styled_component]
-pub fn PlaygroundBetweenCellComponent(PlaygroundBetweenCellComponentProperties{position: pos, direction: dir, words_ids}: &PlaygroundBetweenCellComponentProperties) -> Html
+pub fn PlaygroundBetweenCellComponent(PlaygroundBetweenCellComponentProperties{position: pos, direction: dir, words_ids, on_select}: &PlaygroundBetweenCellComponentProperties) -> Html
 {
     let StyleSettings { word_style_settings: _, playground_style_settings } = use_context::<StyleSettings>().expect("No style provided");
     let PlaygroundStyleSettings 
@@ -148,7 +168,8 @@ pub fn PlaygroundBetweenCellComponent(PlaygroundBetweenCellComponentProperties{p
                 left: ${(pos.x as isize + (*dir == Direction::Right) as isize) * cell_size as isize + pos.x as isize * gap as isize}px;
                 top: ${(pos.y as isize + (*dir == Direction::Down) as isize) * cell_size as isize + pos.y as isize * gap as isize}px;
             )
-        )}/>
+        )}
+        ondblclick={on_select.reform(|_| ())}/>
     }
 }
 
@@ -161,10 +182,12 @@ pub struct PlaygroundWordComponentProperties
     pub height: usize,
     pub id: usize,
     pub error_exists: bool,
+    #[prop_or(PlaygroundWordState::Normal)]
+    pub state: PlaygroundWordState,
 }
 
 #[styled_component]
-pub fn PlaygroundWordComponent(PlaygroundWordComponentProperties{position: pos, width, height, id, error_exists}: &PlaygroundWordComponentProperties) -> Html
+pub fn PlaygroundWordComponent(PlaygroundWordComponentProperties{position: pos, width, height, id, error_exists, state}: &PlaygroundWordComponentProperties) -> Html
 {
     let StyleSettings { word_style_settings: _, playground_style_settings } = use_context::<StyleSettings>().expect("No style provided");
     let PlaygroundStyleSettings 
@@ -198,6 +221,13 @@ pub fn PlaygroundWordComponent(PlaygroundWordComponentProperties{position: pos, 
             border-color: ${color_error_dark};
     ));
 
+    let word_visible_when_selected = (state == &PlaygroundWordState::Selected).then_some(
+        css!
+        (
+            visibility: visible;
+        )
+    );
+
     html!
     {
         <div id={format!("word{}", id)} 
@@ -214,12 +244,14 @@ pub fn PlaygroundWordComponent(PlaygroundWordComponentProperties{position: pos, 
                 user-select: none;
             ),
             word_red_when_errors,
+            word_visible_when_selected,
             css!
             (
                 left: ${pos.x as isize * (cell_size + gap) as isize + word_border_dist_from_cell_wall as isize}px;
                 top: ${pos.y as isize * (cell_size + gap) as isize + word_border_dist_from_cell_wall as isize}px;
                 width: ${width * (cell_size + gap) - gap - 2 * word_border_dist_from_cell_wall}px;
                 height: ${height * (cell_size + gap) - gap - 2 * word_border_dist_from_cell_wall}px;
+                opacity: ${if state == &PlaygroundWordState::Phantom {0.5} else {1f32}};
             )
         )}/>
     }
@@ -233,11 +265,13 @@ pub struct PlaygroundWordErrorOutlineComponentProperties
     pub direction: Direction,
     pub length: usize,
     pub start: usize,
-    pub end: usize
+    pub end: usize,
+    #[prop_or(false)]
+    pub phantom: bool
 }
 
 #[function_component]
-pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentProperties{position: ref pos, direction: ref dir, length: w_len, start, end}: &PlaygroundWordErrorOutlineComponentProperties) -> Html
+pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentProperties{position: ref pos, direction: ref dir, length: w_len, start, end, phantom}: &PlaygroundWordErrorOutlineComponentProperties) -> Html
 {
     let (w_width, w_height) = match dir
     {
@@ -330,6 +364,7 @@ pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentP
                         top: ${div_pos_y}px;
                         height: ${div_end - div_start}px;
                         transform: rotate(${-90 + side_direction * 90}deg);
+                        opacity: ${if phantom {0.5} else {1f32}};
                     )
                 )}/>
             })
@@ -362,6 +397,7 @@ pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentP
                         left: ${x}px;
                         top: ${y}px;
                         transform: rotate(${side_direction * 90}deg) translate(${-(between_word_radius as isize)}px, ${-(between_word_width as isize) / 2}px);
+                        opacity: ${if phantom {0.5} else {1f32}};
                     )
                 )}
                     width={svg_size.to_string()}

@@ -11,7 +11,8 @@ use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
 #[function_component]
-fn App() -> Html {
+fn App() -> Html 
+{
 
     let mut settings = WordCompatibilitySettings::default();
     settings.corner_by_corner = false;

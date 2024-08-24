@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::default;
 use std::io::Empty;
 use std::iter::{empty, once, repeat};
+use std::ops::{Deref, DerefMut};
 
 use crossword_generator::crossword::{Crossword, CrosswordError, WordCompatibilityError, WordCompatibilitySettings};
 use crossword_generator::placed_word::PlacedWord;
@@ -29,6 +30,53 @@ use crate::utils::color_rgba::ColorRGBA;
 use super::super::utils::weak_component_link::WeakComponentLink;
 use super::playground_children_components::PlaygroundWordErrorOutlineComponent;
 
+#[derive(Default, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
+pub enum PlaygroundWordState
+{
+    #[default]
+    Normal,
+    Selected,
+    Phantom,
+}
+
+#[derive(Default, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
+pub struct PlaygroundWord<CharT: CrosswordChar, StrT: CrosswordString<CharT>>
+{
+    pub w: PlacedWord<CharT, StrT>,
+    pub state: PlaygroundWordState,
+}
+
+impl<CharT: CrosswordChar, StrT: CrosswordString<CharT>> PlaygroundWord<CharT, StrT>
+{
+    fn new(w: PlacedWord<CharT, StrT>, state: PlaygroundWordState) -> PlaygroundWord<CharT, StrT>
+    {
+        PlaygroundWord { w, state }
+    }
+
+    fn from_placed_word(w: PlacedWord<CharT, StrT>) -> PlaygroundWord<CharT, StrT>
+    {
+        PlaygroundWord::new(w, PlaygroundWordState::Normal)
+    }
+}
+
+impl<CharT: CrosswordChar, StrT: CrosswordString<CharT>> Deref for PlaygroundWord<CharT, StrT>
+{
+    type Target = PlacedWord<CharT, StrT>;
+
+    fn deref(&self) -> &Self::Target
+    {
+        &self.w
+    }
+}
+
+impl<CharT: CrosswordChar, StrT: CrosswordString<CharT>> DerefMut for PlaygroundWord<CharT, StrT>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target
+    {
+        &mut self.w
+    }
+}
+
 #[derive(PartialEq, Properties)]
 pub struct PlaygroundComponentProps<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'static>
 {
@@ -41,8 +89,9 @@ pub enum PlaygroundComponentMessage<CharT: CrosswordChar, StrT: CrosswordString<
 {
     SetCrossword(Crossword<CharT, StrT>),
     SetWords(Vec<PlacedWord<CharT, StrT>>),
-    AddWord(PlacedWord<CharT, StrT>),
-    RemoveWord(StrT),
+    AddWord(PlaygroundWord<CharT, StrT>),
+    RemoveWord(PlaygroundWord<CharT, StrT>),
+    ChangeWord(PlaygroundWord<CharT, StrT>, PlaygroundWord<CharT, StrT>),
 
     Scroll(f32, f32),
     Zoom(f32),
@@ -50,7 +99,7 @@ pub enum PlaygroundComponentMessage<CharT: CrosswordChar, StrT: CrosswordString<
 
 pub struct PlaygroundComponent<CharT: CrosswordChar, StrT: CrosswordString<CharT>>
 {
-    words: Vec<PlacedWord<CharT, StrT>>,
+    words: Vec<PlaygroundWord<CharT, StrT>>,
     word_compatibility_settings: WordCompatibilitySettings,
     transform_x: f32,
     transform_y: f32,
@@ -61,10 +110,9 @@ pub struct PlaygroundComponent<CharT: CrosswordChar, StrT: CrosswordString<CharT
 
 impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'static> PlaygroundComponent<CharT, StrT>
 {
-
-    fn recalculate_drawing_data(&mut self)
+    fn recalculate_drawing_data(&mut self, ctx: &Context<Self>)
     {
-        let mut word_data = self.words.iter().enumerate().map(|(i, w)| (w, (i, Vec::<(WordCompatibilityError, &PlacedWord<CharT, StrT>)>::default()))).collect::<HashMap<_, _>>();
+        let mut word_data = self.words.iter().enumerate().map(|(i, w)| (w, (i, Vec::<(WordCompatibilityError, &PlaygroundWord<CharT, StrT>)>::default()))).collect::<HashMap<_, _>>();
         for words in self.words.iter().combinations(2)
         {
             if let Some(error) = self.word_compatibility_settings.word_compatibility_issue(words[0], words[1])
@@ -75,7 +123,7 @@ impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'st
         }
 
 
-        let mut cell_data: HashMap<Position, (Vec<(&PlacedWord<CharT, StrT>, usize)>, Vec<(WordCompatibilityError, &PlacedWord<CharT, StrT>)>)> = HashMap::new();
+        let mut cell_data: HashMap<Position, (Vec<(&PlaygroundWord<CharT, StrT>, usize)>, Vec<(WordCompatibilityError, &PlaygroundWord<CharT, StrT>)>)> = HashMap::new();
 
         for (&w, _) in word_data.iter()
         {
@@ -103,7 +151,7 @@ impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'st
             }
         }
 
-        let mut between_cell_data: HashMap<(Position, Direction), (Vec<&PlacedWord<CharT, StrT>>, Vec<(WordCompatibilityError, &PlacedWord<CharT, StrT>)>)> = HashMap::new();
+        let mut between_cell_data: HashMap<(Position, Direction), (Vec<&PlaygroundWord<CharT, StrT>>, Vec<(WordCompatibilityError, &PlaygroundWord<CharT, StrT>)>)> = HashMap::new();
 
         for (&w, _) in word_data.iter()
         {
@@ -223,27 +271,68 @@ impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'st
                     WordCompatibilityError::InvalidIntersection => unreachable!(),
                 }, w_o)
             })
-            .collect::<Vec<(&WordCompatibilityError, (&PlacedWord<CharT, StrT>, (i16, i16)), &PlacedWord<CharT, StrT>)>>();
+            .collect::<Vec<(&WordCompatibilityError, (&PlaygroundWord<CharT, StrT>, (i16, i16)), &PlaygroundWord<CharT, StrT>)>>();
 
         let cell_html = cell_data.iter().map(|(pos, (words_and_indexes, compatibility_errors))|
         {
             let characters = words_and_indexes.iter().map(|(w, i)| w.value.as_ref()[*i].clone()).collect::<HashSet<_>>();
             let character = (characters.len() == 1).then_some(characters.into_iter().next().unwrap());
-            let words_ids = words_and_indexes.iter().map(|(w, _)| word_data.get(w).unwrap().0).collect::<Vec<_>>();
+            let words_ids = words_and_indexes.iter().map(|(w, _)| word_data.get(w).unwrap().0).collect_vec();
+            let phantom = words_and_indexes.iter().all(|(w, _)| w.state == PlaygroundWordState::Phantom);
+            let selected = words_and_indexes.iter().any(|(w, _)| w.state == PlaygroundWordState::Selected);
+
+            let state = if phantom { PlaygroundWordState::Phantom } else if selected { PlaygroundWordState::Selected } else { PlaygroundWordState::Normal };
+
 
             html!
             {
-                <PlaygroundCellComponent<CharT> character={character} words_ids={words_ids} position={pos.clone()}/>
+                <PlaygroundCellComponent<CharT> character={character} words_ids={words_ids} position={pos.clone()} state={state} 
+                    on_invert_word_direction=
+                    {
+                        let ctx_link = ctx.link().clone();
+                        let words_with_changes = words_and_indexes.iter().map(|&(w, i)| 
+                        {
+                            let mut changed_word = w.clone();
+                            changed_word.position = match &changed_word.direction
+                            {
+                                Direction::Right => Position { x: changed_word.position.x + i as i16, y: changed_word.position.y - i as i16},
+                                Direction::Down => Position { x: changed_word.position.x - i as i16, y: changed_word.position.y + i as i16} 
+                            };
+                            changed_word.direction = changed_word.direction.opposite();
+        
+                            (w.clone(), changed_word)
+                        }).collect_vec();
+                        Callback::from(move |_| ctx_link.send_message_batch(words_with_changes.iter().map(|(w, ch_w)| PlaygroundComponentMessage::ChangeWord(w.clone(), ch_w.clone())).collect_vec()))
+                    }
+                    on_select=
+                    {
+                        let ctx_link = ctx.link().clone();
+                        let word = words_and_indexes[0].0.clone();
+                        let mut changed_word = word.clone();
+                        
+                        changed_word.state = match changed_word.state { PlaygroundWordState::Phantom => PlaygroundWordState::Phantom, _ => PlaygroundWordState::Selected }; 
+                        Callback::from(move |_| ctx_link.send_message(PlaygroundComponentMessage::ChangeWord(word.clone(), changed_word.clone())))
+                    }
+                />
             }
         });
 
         let between_cell_html = between_cell_data.iter().map(|((pos, dir), (words, compatibility_errors))|
         {
-            let words_ids = words.iter().map(|w| word_data.get(w).unwrap().0).collect::<Vec<_>>();
+            let words_ids = words.iter().map(|w| word_data.get(w).unwrap().0).collect_vec();
 
             html!
             {
-                <PlaygroundBetweenCellComponent position={pos.clone()} direction={dir.clone()} words_ids={words_ids}/>
+                <PlaygroundBetweenCellComponent position={pos.clone()} direction={dir.clone()} words_ids={words_ids}
+                    on_select=
+                    {
+                        let ctx_link = ctx.link().clone();
+                        let word = words[0].clone();
+                        let mut changed_word = word.clone();
+                        changed_word.state = match changed_word.state { PlaygroundWordState::Phantom => PlaygroundWordState::Phantom, _ => PlaygroundWordState::Selected }; 
+                        Callback::from(move |_| ctx_link.send_message(PlaygroundComponentMessage::ChangeWord(word.clone(), changed_word.clone())))
+                    }
+                />
             }
         });
 
@@ -256,15 +345,19 @@ impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'st
                 Direction::Down => (1, w.value.as_ref().len()),
             };
 
+            let other_words_phantom = !errors.is_empty() && errors.iter().all(|(_, b)| b.state == PlaygroundWordState::Phantom);
+            let mut state = w.state.clone();
+            if state == PlaygroundWordState::Normal && other_words_phantom { state = PlaygroundWordState::Phantom; }
+
             html!
             {
-                <PlaygroundWordComponent position={w.position.clone()} width={width} height={height} id={i} error_exists={!errors.is_empty()}/>
+                <PlaygroundWordComponent position={w.position.clone()} width={width} height={height} id={i} error_exists={!errors.is_empty()} state={state}/>
             }
         });
 
         let between_word_html = between_word_data.iter().map(|(compatibility_error, (w, (start, end)), w2)|
         {
-            html! { <PlaygroundWordErrorOutlineComponent position={w.position.clone()} direction={w.direction.clone()} length={w.value.as_ref().len()} start={*start as usize} end={*end as usize}/> }
+            html! { <PlaygroundWordErrorOutlineComponent position={w.position.clone()} direction={w.direction.clone()} length={w.value.as_ref().len()} start={*start as usize} end={*end as usize} phantom={w.state == PlaygroundWordState::Phantom || w2.state == PlaygroundWordState::Phantom}/> }
         });
 
         self.html = cell_html.chain(between_cell_html).chain(word_html).chain(between_word_html).collect();
@@ -282,7 +375,7 @@ impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'st
         ctx.props().link.borrow_mut().replace(ctx.link().clone());
         let mut this = PlaygroundComponent
         {
-            words: ctx.props().words.clone(),
+            words: ctx.props().words.iter().cloned().map(|w| PlaygroundWord::from_placed_word(w)).collect(),
             word_compatibility_settings: ctx.props().word_compatibility_settings.clone(),
             transform_x: 0f32,
             transform_y: 0f32,
@@ -290,27 +383,54 @@ impl<CharT: CrosswordChar + ToHtml + 'static, StrT: CrosswordString<CharT> + 'st
 
             html: Vec::default(),
         };
-        this.recalculate_drawing_data();
+        this.recalculate_drawing_data(ctx);
         this
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool 
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool 
     {
         match msg
         {
-            PlaygroundComponentMessage::SetWords(ws) => { self.words = ws; self.recalculate_drawing_data(); },
-            PlaygroundComponentMessage::SetCrossword(cw) => { self.words = cw.into_iter().collect(); self.recalculate_drawing_data(); },
-            PlaygroundComponentMessage::AddWord(w) => { self.words.push(w); self.recalculate_drawing_data(); },
-            PlaygroundComponentMessage::RemoveWord(s) => if let Some(pos) = self.words.iter().position(|x| x.value == s) { self.words.remove(pos); self.recalculate_drawing_data(); }
+            PlaygroundComponentMessage::SetWords(ws) => 
+            {
+                self.words = ws.into_iter().map(|x| PlaygroundWord::from_placed_word(x)).collect(); 
+                self.recalculate_drawing_data(ctx); 
+            },
+            PlaygroundComponentMessage::SetCrossword(cw) => 
+            { 
+                self.words = cw.into_iter().map(|x| PlaygroundWord::from_placed_word(x)).collect(); 
+                self.recalculate_drawing_data(ctx); 
+            },
+            PlaygroundComponentMessage::AddWord(w) => 
+            { 
+                self.words.push(w); 
+                self.recalculate_drawing_data(ctx); 
+            },
+            PlaygroundComponentMessage::RemoveWord(w) => 
+                if let Some(pos) = self.words.iter().position(|x| *x == w) 
+                { 
+                    self.words.remove(pos); 
+                    self.recalculate_drawing_data(ctx); 
+                }
+            PlaygroundComponentMessage::ChangeWord(w, w_o) => 
+                if w != w_o
+                {
+                    if let Some(pos) = self.words.iter().position(|x| *x == w) 
+                    { 
+                        self.words.remove(pos); 
+                        self.words.push(w_o); 
+                        self.recalculate_drawing_data(ctx); 
+                    }
+                }
             PlaygroundComponentMessage::Scroll(amount_x, amount_y) => { self.transform_x += amount_x; self.transform_y += amount_y; },
             PlaygroundComponentMessage::Zoom(amount) => self.transform_zoom *= amount,
         }
         true
     }
 
-    fn changed(&mut self, ctx: &Context<Self>, _old_props: &Self::Properties) -> bool 
+    fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool 
     {
-        if ctx.props().words != _old_props.words
+        if ctx.props().words != old_props.words
         {
             ctx.link().send_message(PlaygroundComponentMessage::SetWords(ctx.props().words.clone()));
             return false;
