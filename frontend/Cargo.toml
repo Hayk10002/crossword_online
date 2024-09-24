@@ -7,10 +7,12 @@ edition = "2021"
 yew = { version = "0.21.0", features = ["csr"] }
 yew-router = "0.18.0"
 wasm-bindgen = "0.2.93"
-web-sys = { version = "0.3.69", features = ["CssStyleDeclaration", "DomRect", "HtmlCollection"] }
-stylist = { version = "0.13.0", features = ["yew", "macros"] }
+web-sys = { version = "0.3.69", features = ["CssStyleDeclaration", "DomRect", "HtmlCollection", "DataTransfer", "DomTokenList"] }
+stylist = { version = "0.13.0", default-features = false, features = ["yew", "macros"] }
 gloo-console = "0.3.0" 
 gloo-utils = "0.2.0"
+gloo-timers = "0.3.0"
 itertools = "0.13.0"
 serde = "1.0.208"
+serde_json = "1.0.127"
 crossword_generator = { git = "https://github.com/Hayk10002/crossword_generator.git" }

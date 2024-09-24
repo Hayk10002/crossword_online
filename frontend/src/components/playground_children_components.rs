@@ -10,18 +10,18 @@ use super::playground_component::PlaygroundWordState;
 pub struct PlaygroundCellComponentProperties<CharT: CrosswordChar>
 {
     pub position: Position,
-    pub words_ids: Vec<usize>,
+    pub word_ids: Vec<usize>,
     pub character: Option<CharT>,
     #[prop_or(PlaygroundWordState::Normal)]
     pub state: PlaygroundWordState,
     #[prop_or(Callback::noop())]
     pub on_invert_word_direction: Callback<()>,
     #[prop_or(Callback::noop())]
-    pub on_select: Callback<()>,
+    pub on_select: Callback<bool>,
 }
 
 #[styled_component]
-pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComponentProperties{position: pos, words_ids, character, state, on_invert_word_direction, on_select}: &PlaygroundCellComponentProperties<CharT>) -> Html
+pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComponentProperties{position: pos, word_ids, character, state, on_invert_word_direction, on_select}: &PlaygroundCellComponentProperties<CharT>) -> Html
 {
     let StyleSettings { word_style_settings: _, playground_style_settings } = use_context::<StyleSettings>().expect("No style provided");
     let PlaygroundStyleSettings 
@@ -48,7 +48,7 @@ pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComp
             color_error_light,
         } = theme;
     
-    let words_visible_when_hovered = words_ids.into_iter().map(|id| 
+    let words_visible_when_hovered = word_ids.into_iter().map(|id| 
         css!(
             :hover ~ #${format!("word{}", id)} 
             { 
@@ -85,6 +85,7 @@ pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComp
                 color: white; 
                 cursor: default;
                 user-select: none;
+                pointer-events: inherit;
 
                 :hover
                 {  
@@ -98,8 +99,9 @@ pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComp
                 top: ${pos.y as isize * cell_size as isize + pos.y as isize * gap as isize}px;
                 opacity: ${if state == &PlaygroundWordState::Phantom {0.5} else {1f32}};
             )
-        )}
-        ondblclick={on_select.reform(|_| ())}>
+        )} 
+        draggable={ (state == &PlaygroundWordState::Selected).to_string() }
+        onclick={on_select.reform(|event: MouseEvent| event.ctrl_key())}>
             { character }
         </div>
     }
@@ -112,13 +114,14 @@ pub struct PlaygroundBetweenCellComponentProperties
 {
     pub position: Position,
     pub direction: Direction,
-    pub words_ids: Vec<usize>,
+    pub word_ids: Vec<usize>,
+    pub draggable: bool,
     #[prop_or(Callback::noop())]
-    pub on_select: Callback<()>,
+    pub on_select: Callback<bool>,
 }
 
 #[styled_component]
-pub fn PlaygroundBetweenCellComponent(PlaygroundBetweenCellComponentProperties{position: pos, direction: dir, words_ids, on_select}: &PlaygroundBetweenCellComponentProperties) -> Html
+pub fn PlaygroundBetweenCellComponent(PlaygroundBetweenCellComponentProperties{position: pos, direction: dir, word_ids, draggable,  on_select}: &PlaygroundBetweenCellComponentProperties) -> Html
 {
     let StyleSettings { word_style_settings: _, playground_style_settings } = use_context::<StyleSettings>().expect("No style provided");
     let PlaygroundStyleSettings 
@@ -136,7 +139,7 @@ pub fn PlaygroundBetweenCellComponent(PlaygroundBetweenCellComponentProperties{p
         } = playground_style_settings;
 
     
-    let words_visible_when_hovered = words_ids.into_iter().map(|id| 
+    let words_visible_when_hovered = word_ids.into_iter().map(|id| 
         css!(
             :hover ~ #${format!("word{}", id)} 
             { 
@@ -169,7 +172,8 @@ pub fn PlaygroundBetweenCellComponent(PlaygroundBetweenCellComponentProperties{p
                 top: ${(pos.y as isize + (*dir == Direction::Down) as isize) * cell_size as isize + pos.y as isize * gap as isize}px;
             )
         )}
-        ondblclick={on_select.reform(|_| ())}/>
+        draggable={draggable.to_string()}
+        onclick={on_select.reform(|event: MouseEvent| event.ctrl_key())}/>
     }
 }
 

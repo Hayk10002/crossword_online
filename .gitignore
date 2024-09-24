@@ -1,3 +1,4 @@
 /target
 /frontend/dist
 /backend/Rocket.toml
+.vscode/easycode.ignore
