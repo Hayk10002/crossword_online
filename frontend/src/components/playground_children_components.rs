@@ -97,7 +97,6 @@ pub fn PlaygroundCellComponent<CharT: CrosswordChar + ToHtml>(PlaygroundCellComp
             css!(
                 left: ${pos.x as isize * cell_size as isize + pos.x as isize * gap as isize}px;
                 top: ${pos.y as isize * cell_size as isize + pos.y as isize * gap as isize}px;
-                opacity: ${if state == &PlaygroundWordState::Phantom {0.5} else {1f32}};
             )
         )} 
         draggable={ (state == &PlaygroundWordState::Selected).to_string() }
@@ -255,7 +254,6 @@ pub fn PlaygroundWordComponent(PlaygroundWordComponentProperties{position: pos, 
                 top: ${pos.y as isize * (cell_size + gap) as isize + word_border_dist_from_cell_wall as isize}px;
                 width: ${width * (cell_size + gap) - gap - 2 * word_border_dist_from_cell_wall}px;
                 height: ${height * (cell_size + gap) - gap - 2 * word_border_dist_from_cell_wall}px;
-                opacity: ${if state == &PlaygroundWordState::Phantom {0.5} else {1f32}};
             )
         )}/>
     }
@@ -270,12 +268,10 @@ pub struct PlaygroundWordErrorOutlineComponentProperties
     pub length: usize,
     pub start: usize,
     pub end: usize,
-    #[prop_or(false)]
-    pub phantom: bool
 }
 
 #[function_component]
-pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentProperties{position: ref pos, direction: ref dir, length: w_len, start, end, phantom}: &PlaygroundWordErrorOutlineComponentProperties) -> Html
+pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentProperties{position: ref pos, direction: ref dir, length: w_len, start, end}: &PlaygroundWordErrorOutlineComponentProperties) -> Html
 {
     let (w_width, w_height) = match dir
     {
@@ -368,7 +364,6 @@ pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentP
                         top: ${div_pos_y}px;
                         height: ${div_end - div_start}px;
                         transform: rotate(${-90 + side_direction * 90}deg);
-                        opacity: ${if phantom {0.5} else {1f32}};
                     )
                 )}/>
             })
@@ -401,7 +396,6 @@ pub fn PlaygroundWordErrorOutlineComponent(&PlaygroundWordErrorOutlineComponentP
                         left: ${x}px;
                         top: ${y}px;
                         transform: rotate(${side_direction * 90}deg) translate(${-(between_word_radius as isize)}px, ${-(between_word_width as isize) / 2}px);
-                        opacity: ${if phantom {0.5} else {1f32}};
                     )
                 )}
                     width={svg_size.to_string()}

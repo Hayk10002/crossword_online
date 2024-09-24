@@ -47,7 +47,6 @@ pub enum PlaygroundWordState
     #[default]
     Normal,
     Selected,
-    Phantom,
 }
 
 #[derive(Default, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
@@ -136,9 +135,8 @@ pub enum PlaygroundComponentMessage<CharT: CrosswordChar, StrT: CrosswordString<
     SelectAll,
     DeselectWord(PlaygroundWordId),
     DeselectAll,
-    RemoveAllPhantoms,
     SetDragging(bool),
-    StartDragging(WordsType<CharT, StrT>),
+    StartDragging(Vec<PlacedWord<CharT, StrT>>),
     DropDragging,
     EndDragging,
 
@@ -164,7 +162,7 @@ pub struct PlaygroundComponent<CharT: CrosswordChar, StrT: CrosswordString<CharT
     words: WordsType<CharT, StrT>,
     word_compatibility_settings: WordCompatibilitySettings,
 
-    dragging_words: WordsType<CharT, StrT>,
+    dragging_words: Vec<PlacedWord<CharT, StrT>>,
     dragging_mouse_offset_x: f32, 
     dragging_mouse_offset_y: f32, 
 
@@ -252,12 +250,6 @@ impl<CharT, StrT> PlaygroundComponent<CharT, StrT>
                 self.words.iter_mut().filter(|(_, w)| w.state == PlaygroundWordState::Selected).for_each(|(_, w)| w.state = PlaygroundWordState::Normal);
                 true
             }
-            PlaygroundComponentMessage::RemoveAllPhantoms =>
-            {
-                let to_remove = self.words.iter().filter_map(|(id, w)| (w.state == PlaygroundWordState::Phantom).then_some(*id)).collect_vec();
-                to_remove.into_iter().for_each(|id| { self.words.remove(&id); });
-                true
-            }
             
             PlaygroundComponentMessage::SetDragging(val) =>
             {
@@ -267,26 +259,31 @@ impl<CharT, StrT> PlaygroundComponent<CharT, StrT>
             PlaygroundComponentMessage::StartDragging(words) => 
             {
                 self.dragging_words = words;
-                for (id, w) in self.dragging_words.iter()
-                {
-                    self.words.insert(*id, PlaygroundWord::new(w.w.clone(), PlaygroundWordState::Phantom));   
-                }
                 true
             }
             PlaygroundComponentMessage::DropDragging =>
             {
-                let words_to_insert = self.dragging_words.keys().filter_map(|id| self.words.get(id)).map(|w| PlaygroundWord::new(w.w.clone(), PlaygroundWordState::Normal)).collect_vec();
 
-                words_to_insert.into_iter().for_each(|w| { self.words.insert(PlaygroundWordId::new(), w); });
+                let set = ctx.link().context::<StyleSettings>(Callback::noop()).unwrap().0;
+                let cell_size = set.playground_style_settings.cell_size as f32;
+                let gap = set.playground_style_settings.gap as f32;
+
+                let ph_off_x = ((self.dragging_div_pos_x + (cell_size + gap) / 2.0) / (cell_size + gap)).floor() as isize;
+                let ph_off_y = ((self.dragging_div_pos_y + (cell_size + gap) / 2.0) / (cell_size + gap)).floor() as isize;
+
+                for w in self.dragging_words.iter()
+                {
+                    let pos = w.position.clone();
+                    let mut w = w.clone();
+                    let new_pos = Position { x: pos.x + ph_off_x as i16, y: pos.y + ph_off_y as i16 }; 
+                    w.position = new_pos;
+                    self.words.insert(PlaygroundWordId::new(), PlaygroundWord::from_placed_word(w));
+                }
                 
                 true
             }
             PlaygroundComponentMessage::EndDragging =>
             {
-                for id in self.dragging_words.keys()
-                {
-                    self.words.remove(id);
-                }
                 self.dragging_words.clear();
                 true
             }
@@ -303,33 +300,7 @@ impl<CharT, StrT> PlaygroundComponent<CharT, StrT>
             PlaygroundComponentMessage::Zoom(amount) => { self.transform_zoom *= amount; false },
 
             PlaygroundComponentMessage::SetDraggingOffset(x, y) => { self.dragging_mouse_offset_x = x; self.dragging_mouse_offset_y = y; false }
-            PlaygroundComponentMessage::SetDraggingDivPos(x, y) => 
-            { 
-                self.dragging_div_pos_x = x; 
-                self.dragging_div_pos_y = y; 
-
-                let set = ctx.link().context::<StyleSettings>(Callback::noop()).unwrap().0;
-                let cell_size = set.playground_style_settings.cell_size as f32;
-                let gap = set.playground_style_settings.gap as f32;
-
-                let ph_off_x = ((x + (cell_size + gap) / 2.0) / (cell_size + gap)).floor() as isize;
-                let ph_off_y = ((y + (cell_size + gap) / 2.0) / (cell_size + gap)).floor() as isize;
-
-                let mut changed = false;
-
-                for (id, w) in self.dragging_words.iter()
-                {
-                    let pos = w.position.clone();
-                    let w = self.words.get_mut(id).unwrap();
-                    let new_pos = Position { x: pos.x + ph_off_x as i16, y: pos.y + ph_off_y as i16 }; 
-                    if w.position != new_pos
-                    {
-                        w.position = new_pos;
-                        changed = true;
-                    }
-                }
-                changed 
-            }
+            PlaygroundComponentMessage::SetDraggingDivPos(x, y) => { self.dragging_div_pos_x = x; self.dragging_div_pos_y = y; false }
         }
     }
 
@@ -521,10 +492,9 @@ impl<CharT, StrT> PlaygroundComponent<CharT, StrT>
             let characters = words_and_indexes.iter().map(|(w_id, i)| words[w_id].value.as_ref()[*i].clone()).collect::<HashSet<_>>();
             let character = (characters.len() == 1).then_some(characters.into_iter().next().unwrap());
             let word_ids = words_and_indexes.iter().map(|(w_id, _)| w_id.id()).collect_vec();
-            let phantom = words_and_indexes.iter().all(|(w_id, _)| words[w_id].state == PlaygroundWordState::Phantom);
             let selected = words_and_indexes.iter().any(|(w_id, _)| words[w_id].state == PlaygroundWordState::Selected);
 
-            let state = if phantom { PlaygroundWordState::Phantom } else if selected { PlaygroundWordState::Selected } else { PlaygroundWordState::Normal };
+            let state = if selected { PlaygroundWordState::Selected } else { PlaygroundWordState::Normal };
 
 
             html!
@@ -599,13 +569,9 @@ impl<CharT, StrT> PlaygroundComponent<CharT, StrT>
                 Direction::Down => (1, w.value.as_ref().len()),
             };
 
-            let other_words_phantom = !errors.is_empty() && errors.iter().all(|(_, other_w_id)| words[other_w_id].state == PlaygroundWordState::Phantom);
-            let mut state = w.state.clone();
-            if state == PlaygroundWordState::Normal && other_words_phantom { state = PlaygroundWordState::Phantom; }
-
             html!
             {
-                <PlaygroundWordComponent position={w.position.clone()} width={width} height={height} id={w_id.id()} error_exists={!errors.is_empty()} state={state}/>
+                <PlaygroundWordComponent position={w.position.clone()} width={width} height={height} id={w_id.id()} error_exists={!errors.is_empty()} state={w.state.clone()}/>
             }
         }).collect_vec()
     }
@@ -616,7 +582,7 @@ impl<CharT, StrT> PlaygroundComponent<CharT, StrT>
         {
             let w = &words[w_id];
             let w2 = &words[w2_id];
-            html! { <PlaygroundWordErrorOutlineComponent position={w.position.clone()} direction={w.direction.clone()} length={w.value.as_ref().len()} start={*start as usize} end={*end as usize} phantom={w.state == PlaygroundWordState::Phantom || w2.state == PlaygroundWordState::Phantom}/> }
+            html! { <PlaygroundWordErrorOutlineComponent position={w.position.clone()} direction={w.direction.clone()} length={w.value.as_ref().len()} start={*start as usize} end={*end as usize}/> }
         }).collect_vec()
     }
 
@@ -646,11 +612,13 @@ impl<CharT, StrT> PlaygroundComponent<CharT, StrT>
 
     fn recalculate_dragging_drawing_data(&mut self, ctx: &Context<Self>)
     {
-        let word_data = PlaygroundComponent::calculate_word_data(&self.dragging_words, &self.word_compatibility_settings);
+        let dragging_words = self.dragging_words.iter().map(|w| (PlaygroundWordId::new(), PlaygroundWord::from_placed_word(w.clone()))).collect();
 
-        let cell_data = PlaygroundComponent::calculate_cell_data(&word_data, &self.dragging_words);
+        let word_data = PlaygroundComponent::calculate_word_data(&dragging_words, &self.word_compatibility_settings);
 
-        let cell_html = PlaygroundComponent::generate_cell_html(&cell_data, &self.dragging_words, ctx);
+        let cell_data = PlaygroundComponent::calculate_cell_data(&word_data, &dragging_words);
+
+        let cell_html = PlaygroundComponent::generate_cell_html(&cell_data, &dragging_words, ctx);
 
         self.dragging_html = cell_html;
     }
@@ -670,7 +638,7 @@ where
 {
     dragging_mouse_offset_x: f32,
     dragging_mouse_offset_y: f32,
-    data: Vec<(PlacedWord<CharT, StrT>, Option<PlaygroundWordId>)>
+    data: Vec<PlacedWord<CharT, StrT>>
 }
 
 fn encode_uppercase(s: &str) -> String
@@ -755,7 +723,7 @@ impl<CharT, StrT> Component for PlaygroundComponent<CharT, StrT>
             transform_y: 0f32,
             transform_zoom: 0.3f32,
 
-            dragging_words: HashMap::default(),
+            dragging_words: Vec::default(),
             dragging_mouse_offset_x: 100f32,
             dragging_mouse_offset_y: 100f32,
 
@@ -850,7 +818,7 @@ impl<CharT, StrT> Component for PlaygroundComponent<CharT, StrT>
                 {
                     //event.prevent_default();
                     let ctx_link = ctx_link.clone();
-                    let words = selected_word_ids_and_words.iter().map(|(_, w)| (w.w.clone(), None)).collect_vec();
+                    let words = selected_word_ids_and_words.iter().map(|(_, w)| w.w.clone()).collect_vec();
                     let ids = selected_word_ids_and_words.iter().map(|(id, _)| *id).collect_vec();
 
                     let playground = playground_node_ref.cast::<HtmlElement>().unwrap();
@@ -868,7 +836,7 @@ impl<CharT, StrT> Component for PlaygroundComponent<CharT, StrT>
                     {
                         log!("dragstart");
                         data_transfer.clear_data().unwrap();
-                        data_transfer.set_data("text/plain", &drag_data.data.iter().map(|(w, _)| serde_json::to_string(&w.value).unwrap()).join(",")).unwrap();
+                        data_transfer.set_data("text/plain", &drag_data.data.iter().map(|w| serde_json::to_string(&w.value).unwrap()).join(",")).unwrap();
                         set_drag_data(&data_transfer, &drag_data);
                         data_transfer.set_drag_image(&dragging_image_ref.cast::<Element>().unwrap(), 0, 0);
                     }
@@ -904,15 +872,14 @@ impl<CharT, StrT> Component for PlaygroundComponent<CharT, StrT>
                     log!("dragenter");
                     if let Some(data_transfer) = event.data_transfer()
                     {
-                        if let Some(mut drag_data) = get_drag_data(&data_transfer)
+                        if let Some(drag_data) = get_drag_data(&data_transfer)
                         {
-                            drag_data.data.iter_mut().for_each(|(_, id)| *id = Some(PlaygroundWordId::new()));
                             set_drag_data(&data_transfer, &drag_data);
 
                             let ctx_link = ctx_link.clone();
 
                             ctx_link.send_message(PlaygroundComponentMessage::SetDraggingOffset(drag_data.dragging_mouse_offset_x, drag_data.dragging_mouse_offset_y));
-                            ctx_link.send_message(PlaygroundComponentMessage::MessageBatch(vec![PlaygroundComponentMessage::SetDragging(true), PlaygroundComponentMessage::StartDragging(drag_data.data.into_iter().map(|(w, id)| (id.unwrap(), PlaygroundWord::from_placed_word(w))).collect())]));
+                            ctx_link.send_message(PlaygroundComponentMessage::MessageBatch(vec![PlaygroundComponentMessage::SetDragging(true), PlaygroundComponentMessage::StartDragging(drag_data.data)]));
                         }
                     }
                 })
